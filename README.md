@@ -236,7 +236,6 @@ Clicar em "Área de Trabalho 🔒" ou "Entrar"
 - 😀 Painel de emojis rápidos (👍 ❤️ 😂 🎮 ✅ ❌ 🔥 👋)
 - 📜 Histórico de mensagens
 - 💾 Dados persistentes no localStorage
-- 📜 [Log de desenvolvimento do chat](development_chat_log.md)
 
 #### 5. Painel de Status (Dashboard)
 - 📊 Cards com resumo: tarefas pendentes, em progresso, concluídas, documentos
