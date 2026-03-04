@@ -9,6 +9,7 @@
 <meta property="og:description" content="Comunidade gamer brasileira. Faça amizades, jogue junto e divirta-se!">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%231E40AF' rx='20' width='100' height='100'/><text x='50' y='68' font-size='60' fill='white' text-anchor='middle' font-family='Arial' font-weight='bold'>C</text></svg>">
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 :root{--blue-900:#1E3A8A;--blue-800:#1E40AF;--blue-700:#1D4ED8;--blue-600:#2563EB;--blue-500:#3B82F6;--blue-400:#60A5FA;--blue-300:#93C5FD;--blue-200:#BFDBFE;--blue-100:#DBEAFE;--blue-50:#EFF6FF;--white:#FFFFFF;--gray-50:#F8FAFC;--gray-100:#F1F5F9;--gray-200:#E2E8F0;--gray-400:#94A3B8;--gray-600:#475569;--gray-800:#1E293B;--gray-900:#0F172A;--bg:var(--white);--bg2:var(--gray-50);--bg3:var(--gray-100);--text:var(--gray-900);--text2:var(--gray-600);--text3:var(--gray-400);--card-bg:rgba(255,255,255,0.7);--card-border:rgba(59,130,246,0.2);--nav-bg:rgba(255,255,255,0.8);--shadow:0 8px 32px rgba(30,64,175,0.1);--radius:16px;--radius-lg:24px;}
@@ -218,15 +219,16 @@ footer a{color:var(--blue-300);text-decoration:none;transition:color .2s;}footer
 <a href="#hero" onclick="closeMobile()" data-i18n="nav_home">Início</a><a href="#sobre" onclick="closeMobile()" data-i18n="nav_about">Sobre Nós</a><a href="#jogos" onclick="closeMobile()" data-i18n="nav_games">Jogos</a><a href="#equipe" onclick="closeMobile()" data-i18n="nav_team">Equipe</a><a href="#comunidade" onclick="closeMobile()" data-i18n="nav_community">Comunidade</a><a href="#parcerias" onclick="closeMobile()" data-i18n="nav_partners">Parcerias</a><a href="#wiki" onclick="closeMobile()" data-i18n="nav_wiki">Wiki</a><a href="#vagas" onclick="closeMobile()" data-i18n="nav_jobs">Vagas</a><a href="#" onclick="showLogin(event);closeMobile()" data-i18n="nav_workspace">Área de Trabalho 🔒</a>
 </div>
 <div class="modal-overlay" id="loginModal">
-<div class="modal">
+<div class="modal" id="loginModalInner">
 <h2 data-i18n="login_title">🔒 Área de Trabalho</h2>
 <p style="text-align:center;margin-bottom:16px;color:var(--text2);font-size:.9rem" data-i18n="login_desc">Acesso restrito para Admins e Moderadores</p>
+
 <input type="text" id="loginUser" placeholder="Usuário" class="app-input">
 <input type="password" id="loginPass" placeholder="Senha" class="app-input">
 <p class="error" id="loginError" data-i18n="login_error">Usuário ou senha incorretos!</p>
 <div class="modal-btns">
 <button class="btn-secondary" onclick="closeLogin()" data-i18n="login_cancel">Cancelar</button>
-<button class="btn-primary" onclick="doLogin()" data-i18n="login_enter">Entrar</button>
+<button class="btn-primary" id="authSubmitBtn" onclick="handleAuth()" data-i18n="login_enter">Entrar</button>
 </div>
 </div>
 </div>
@@ -349,9 +351,10 @@ footer a{color:var(--blue-300);text-decoration:none;transition:color .2s;}footer
 <div class="os-icon" onclick="openApp('dashboard')"><div class="ico">📊</div><span>Painel</span></div>
 <div class="os-icon" onclick="openApp('notes')"><div class="ico">📝</div><span>Notas</span></div>
 <div class="os-icon" onclick="openApp('settings')"><div class="ico">⚙️</div><span>Config</span></div>
+<div class="os-icon" onclick="openApp('accounts')" id="icon-accounts" style="display:none"><div class="ico">👥</div><span>Contas</span></div>
 </div>
 <div class="os-start-menu" id="osStartMenu">
-<button onclick="openApp('tasks')">📋 Lista de Tarefas</button><button onclick="openApp('docs')">📄 Documentos</button><button onclick="openApp('vault')">🔑 Cofre de Senhas</button><button onclick="openApp('chat')">💬 Chat Interno</button><button onclick="openApp('dashboard')">📊 Painel de Status</button><button onclick="openApp('notes')">📝 Notas Rápidas</button><button onclick="openApp('settings')">⚙️ Configurações</button>
+<button onclick="openApp('tasks')">📋 Lista de Tarefas</button><button onclick="openApp('docs')">📄 Documentos</button><button onclick="openApp('vault')">🔑 Cofre de Senhas</button><button onclick="openApp('chat')">💬 Chat Interno</button><button onclick="openApp('dashboard')">📊 Painel de Status</button><button onclick="openApp('notes')">📝 Notas Rápidas</button><button onclick="openApp('settings')">⚙️ Configurações</button><button onclick="openApp('accounts')" id="start-accounts" style="display:none">👥 Gerenciar Contas</button>
 </div>
 <div class="os-taskbar">
 <div class="os-taskbar-left"><button class="os-start-btn" onclick="toggleStartMenu()">☰ Início</button><div class="os-taskbar-items" id="taskbarItems"></div></div>
@@ -395,14 +398,16 @@ const WIKI_DOCS=[
 const DEFAULT_USERS=[{user:"Doom Reaper",pass:"Rhu@an1730",role:"CEO",name:"Doom Reaper"},{user:"Muguetos",pass:"Senha123",role:"Admin",name:"MUGUETO's"},{user:"Mr. Suco",pass:"Senha123",role:"Admin",name:"Mr. Suco"}];
 function getCustomPasswords(){try{return JSON.parse(localStorage.getItem('os_custom_passwords')||'{}');}catch(e){return {};}}
 function saveCustomPasswords(p){localStorage.setItem('os_custom_passwords',JSON.stringify(p));}
-function getUsers(){const c=getCustomPasswords();return DEFAULT_USERS.map(u=>{const copy={...u};if(c[u.user])copy.pass=c[u.user];return copy;});}
+function getCustomUsers(){try{return JSON.parse(localStorage.getItem('os_custom_users')||'[]');}catch(e){return [];}}
+function saveCustomUsers(u){localStorage.setItem('os_custom_users',JSON.stringify(u));syncAfterChange();}
+function getUsers(){const c=getCustomPasswords();const customU=getCustomUsers();const all=[...DEFAULT_USERS,...customU];return all.map(u=>{const copy={...u};if(c[u.user])copy.pass=c[u.user];return copy;});}
 const USERS=getUsers();
 const GITHUB_CONFIG={gistId:localStorage.getItem('github_gist_id')||'',token:localStorage.getItem('github_token')||'',fileName:'cracker_games_br_workspace.json',syncInterval:30000};
 let syncTimer=null,lastSyncData='',isSyncing=false;
 function getGitHubHeaders(){if(!GITHUB_CONFIG.token)return null;return{'Authorization':'token '+GITHUB_CONFIG.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};}
-async function syncToGitHub(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId||isSyncing)return;isSyncing=true;try{const data={tasks:JSON.parse(localStorage.getItem('os_tasks')||'[]'),docs:JSON.parse(localStorage.getItem('os_docs')||'[]'),vault:JSON.parse(localStorage.getItem('os_vault')||'[]'),chat:JSON.parse(localStorage.getItem('os_chat')||'[]'),notes:JSON.parse(localStorage.getItem('os_notes')||'[]'),custom_passwords:getCustomPasswords(),lastUpdate:new Date().toISOString(),updatedBy:loggedUser?loggedUser.name:'Unknown'};const ds=JSON.stringify(data,null,2);if(ds===lastSyncData){isSyncing=false;return;}const r=await fetch('https://api.github.com/gists/'+GITHUB_CONFIG.gistId,{method:'PATCH',headers:getGitHubHeaders(),body:JSON.stringify({files:{[GITHUB_CONFIG.fileName]:{content:ds}}})});if(r.ok){lastSyncData=ds;showSyncStatus('✅','success');}else{showSyncStatus('❌','error');}}catch(e){showSyncStatus('❌','error');}isSyncing=false;}
-async function syncFromGitHub(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId)return false;try{const r=await fetch('https://api.github.com/gists/'+GITHUB_CONFIG.gistId,{headers:getGitHubHeaders()});if(!r.ok)return false;const g=await r.json();const f=g.files[GITHUB_CONFIG.fileName];if(!f)return false;const d=JSON.parse(f.content);if(d.tasks)localStorage.setItem('os_tasks',JSON.stringify(d.tasks));if(d.docs)localStorage.setItem('os_docs',JSON.stringify(d.docs));if(d.vault)localStorage.setItem('os_vault',JSON.stringify(d.vault));if(d.chat)localStorage.setItem('os_chat',JSON.stringify(d.chat));if(d.notes)localStorage.setItem('os_notes',JSON.stringify(d.notes));if(d.custom_passwords)saveCustomPasswords(d.custom_passwords);lastSyncData=JSON.stringify(d,null,2);return true;}catch(e){return false;}}
-async function createNewGist(){if(!GITHUB_CONFIG.token)return null;try{const d={tasks:[],docs:[],vault:[],chat:[],notes:[],custom_passwords:{},lastUpdate:new Date().toISOString(),updatedBy:'System'};const r=await fetch('https://api.github.com/gists',{method:'POST',headers:getGitHubHeaders(),body:JSON.stringify({description:'Cracker Games BR - Workspace Data',public:false,files:{[GITHUB_CONFIG.fileName]:{content:JSON.stringify(d,null,2)}}})});if(r.ok){const g=await r.json();GITHUB_CONFIG.gistId=g.id;localStorage.setItem('github_gist_id',g.id);showSyncStatus('✅ Gist: '+g.id,'success');return g.id;}}catch(e){}return null;}
+async function syncToGitHub(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId||isSyncing)return;isSyncing=true;try{const data={tasks:JSON.parse(localStorage.getItem('os_tasks')||'[]'),docs:JSON.parse(localStorage.getItem('os_docs')||'[]'),vault:JSON.parse(localStorage.getItem('os_vault')||'[]'),chat:JSON.parse(localStorage.getItem('os_chat')||'[]'),notes:JSON.parse(localStorage.getItem('os_notes')||'[]'),custom_users:getCustomUsers(),custom_passwords:getCustomPasswords(),lastUpdate:new Date().toISOString(),updatedBy:loggedUser?loggedUser.name:'Unknown'};const ds=JSON.stringify(data,null,2);if(ds===lastSyncData){isSyncing=false;return;}const r=await fetch('https://api.github.com/gists/'+GITHUB_CONFIG.gistId,{method:'PATCH',headers:getGitHubHeaders(),body:JSON.stringify({files:{[GITHUB_CONFIG.fileName]:{content:ds}}})});if(r.ok){lastSyncData=ds;showSyncStatus('✅','success');}else{showSyncStatus('❌','error');}}catch(e){showSyncStatus('❌','error');}isSyncing=false;}
+async function syncFromGitHub(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId)return false;try{const r=await fetch('https://api.github.com/gists/'+GITHUB_CONFIG.gistId,{headers:getGitHubHeaders()});if(!r.ok)return false;const g=await r.json();const f=g.files[GITHUB_CONFIG.fileName];if(!f)return false;const d=JSON.parse(f.content);if(d.tasks)localStorage.setItem('os_tasks',JSON.stringify(d.tasks));if(d.docs)localStorage.setItem('os_docs',JSON.stringify(d.docs));if(d.vault)localStorage.setItem('os_vault',JSON.stringify(d.vault));if(d.chat)localStorage.setItem('os_chat',JSON.stringify(d.chat));if(d.notes)localStorage.setItem('os_notes',JSON.stringify(d.notes));if(d.custom_users)saveCustomUsers(d.custom_users);if(d.custom_passwords)saveCustomPasswords(d.custom_passwords);lastSyncData=JSON.stringify(d,null,2);return true;}catch(e){return false;}}
+async function createNewGist(){if(!GITHUB_CONFIG.token)return null;try{const d={tasks:[],docs:[],vault:[],chat:[],notes:[],custom_users:[],custom_passwords:{},lastUpdate:new Date().toISOString(),updatedBy:'System'};const r=await fetch('https://api.github.com/gists',{method:'POST',headers:getGitHubHeaders(),body:JSON.stringify({description:'Cracker Games BR - Workspace Data',public:false,files:{[GITHUB_CONFIG.fileName]:{content:JSON.stringify(d,null,2)}}})});if(r.ok){const g=await r.json();GITHUB_CONFIG.gistId=g.id;localStorage.setItem('github_gist_id',g.id);showSyncStatus('✅ Gist: '+g.id,'success');return g.id;}}catch(e){}return null;}
 function startAutoSync(){if(syncTimer)clearInterval(syncTimer);if(GITHUB_CONFIG.token&&GITHUB_CONFIG.gistId){syncTimer=setInterval(()=>{syncToGitHub();syncFromGitHub().then(ok=>{if(ok)refreshOpenApps();});},GITHUB_CONFIG.syncInterval);}}
 function refreshOpenApps(){if(openWindows.tasks)renderTasks();if(openWindows.docs)renderDocs();if(openWindows.vault)renderVault();if(openWindows.chat)renderChat();if(openWindows.dashboard)renderDashboard();}
 function showSyncStatus(msg,type){const el=document.getElementById('syncStatus');if(el){el.textContent=msg;el.style.color=type==='success'?'#34D399':'#EF4444';clearTimeout(el._timer);el._timer=setTimeout(()=>{el.textContent='';},4000);}}
@@ -445,17 +450,118 @@ function toggleMobile(){document.getElementById('mobileMenu').classList.toggle('
 let easterBuf='';document.addEventListener('keydown',e=>{easterBuf+=e.key.toLowerCase();if(easterBuf.length>7)easterBuf=easterBuf.slice(-7);if(easterBuf.includes('cracker')){easterBuf='';showConfetti();}});
 function showConfetti(){const msg=document.getElementById('easter-msg');msg.style.display='block';for(let i=0;i<40;i++){const c=document.createElement('div');c.className='confetti';c.style.cssText=`left:${Math.random()*100}vw;background:${Math.random()>.5?'#3B82F6':'#FFFFFF'};width:${Math.random()*8+4}px;height:${Math.random()*8+4}px;animation-delay:${Math.random()*2}s;`;document.body.appendChild(c);setTimeout(()=>c.remove(),3000);}setTimeout(()=>msg.style.display='none',3000);}
 let loggedUser=null;
+const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'http://localhost:3000'; // Mude para a URL do seu servidor em produção
+let socket = null;
 function showLogin(e){e&&e.preventDefault();const s=localStorage.getItem('os_session');if(s){loggedUser=JSON.parse(s);enterOS();return;}document.getElementById('loginModal').classList.add('show');}
 function closeLogin(){document.getElementById('loginModal').classList.remove('show');document.getElementById('loginError').style.display='none';}
-function doLogin(){const u=document.getElementById('loginUser').value.trim();const p=document.getElementById('loginPass').value;const found=getUsers().find(x=>x.user===u&&x.pass===p);if(!found){document.getElementById('loginError').style.display='block';return;}loggedUser=found;localStorage.setItem('os_session',JSON.stringify(found));closeLogin();enterOS();}
-function doLogout(){loggedUser=null;localStorage.removeItem('os_session');exitOS();}
-function enterOS(){document.getElementById('mainSite').style.display='none';document.getElementById('siteFooter').style.display='none';document.querySelector('.ticker').style.display='none';document.getElementById('navbar').style.display='none';document.getElementById('backTop').style.display='none';document.getElementById('cracker-os').classList.add('active');document.getElementById('osUser').textContent=`${loggedUser.name} (${loggedUser.role})`;startClock();loadNotes();if(GITHUB_CONFIG.token&&GITHUB_CONFIG.gistId){syncFromGitHub().then(ok=>{if(ok)refreshOpenApps();});startAutoSync();}}
+
+async function handleAuth() {
+    const u = document.getElementById('loginUser').value.trim();
+    const p = document.getElementById('loginPass').value;
+    const err = document.getElementById('loginError');
+    
+    if (!u || !p) {
+        err.textContent = "Preencha todos os campos!";
+        err.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            loggedUser = { user: data.user.username, name: data.user.username, role: data.user.role };
+            localStorage.setItem('os_session', JSON.stringify(loggedUser));
+            closeLogin();
+            enterOS();
+        } else {
+            err.textContent = data.error || "Erro na autenticação";
+            err.style.display = 'block';
+        }
+    } catch(e) {
+        console.warn("Servidor offline, caindo para modo local (localStorage)");
+        const found = getUsers().find(x => x.user === u && x.pass === p);
+        if (!found) { err.textContent = "Usuário ou senha incorretos!"; err.style.display = 'block'; return; }
+        loggedUser = found;
+        localStorage.setItem('os_session', JSON.stringify(loggedUser));
+        closeLogin();
+        enterOS();
+    }
+}
+
+function doLogout(){loggedUser=null;localStorage.removeItem('os_session');if(socket)socket.disconnect();exitOS();}
+function enterOS(){
+  document.getElementById('mainSite').style.display='none';
+  document.getElementById('siteFooter').style.display='none';
+  document.querySelector('.ticker').style.display='none';
+  document.getElementById('navbar').style.display='none';
+  document.getElementById('backTop').style.display='none';
+  document.getElementById('cracker-os').classList.add('active');
+  document.getElementById('osUser').textContent=`${loggedUser.name} (${loggedUser.role})`;
+  
+  if(loggedUser.role === 'CEO' || loggedUser.user === 'Doom Reaper') {
+    document.getElementById('icon-accounts').style.display='flex';
+    document.getElementById('start-accounts').style.display='flex';
+  } else {
+    document.getElementById('icon-accounts').style.display='none';
+    document.getElementById('start-accounts').style.display='none';
+  }
+
+  startClock();
+  loadNotes();
+  initSocket(); // Inicializa o WebSocket para Chat Real-Time
+  if(GITHUB_CONFIG.token&&GITHUB_CONFIG.gistId){
+    syncFromGitHub().then(ok=>{if(ok)refreshOpenApps();});
+    startAutoSync();
+  }
+}
+
+function initSocket() {
+    if (typeof io !== 'undefined') {
+        try {
+            socket = io(BACKEND_URL);
+            socket.on('connect', () => console.log('Conectado ao servidor real-time!'));
+            socket.on('chatHistory', (msgs) => {
+                const formattedMsgs = msgs.map(m => ({
+                    user: m.sender,
+                    text: m.content,
+                    type: m.type,
+                    time: new Date(m.timestamp).toLocaleTimeString()
+                }));
+                localStorage.setItem('os_chat', JSON.stringify(formattedMsgs));
+                if(openWindows.chat) renderChat();
+            });
+            socket.on('newMessage', (m) => {
+                const chats = getChats();
+                chats.push({
+                    user: m.sender,
+                    text: m.content,
+                    type: m.type,
+                    time: new Date(m.timestamp).toLocaleTimeString()
+                });
+                localStorage.setItem('os_chat', JSON.stringify(chats));
+                if(openWindows.chat) renderChat();
+            });
+            socket.on('workspaceUpdate', (data) => {
+                // Para futuras atualizações automáticas de tarefas e docs
+            });
+        } catch(e) {
+            console.log('Servidor WebSocket offline, operando localmente.');
+        }
+    }
+}
+
 function exitOS(){document.getElementById('cracker-os').classList.remove('active');document.getElementById('mainSite').style.display='';document.getElementById('siteFooter').style.display='';document.querySelector('.ticker').style.display='';document.getElementById('navbar').style.display='';document.querySelectorAll('.os-window').forEach(w=>w.remove());document.getElementById('taskbarItems').innerHTML='';openWindows_clear();}
 function openWindows_clear(){for(const k in openWindows)delete openWindows[k];}
 function startClock(){setInterval(()=>{document.getElementById('osClock').textContent=new Date().toLocaleTimeString();},1000);}
 function toggleStartMenu(){document.getElementById('osStartMenu').classList.toggle('show');}
 let winZ=100,winCount=0;const openWindows={};
-function openApp(id){document.getElementById('osStartMenu').classList.remove('show');if(openWindows[id]){const w=openWindows[id];w.style.display='flex';w.style.zIndex=++winZ;updateTaskbar();return;}const win=document.createElement('div');win.className='os-window open';win.id='win-'+id;win.style.cssText=`top:${50+winCount*30}px;left:${80+winCount*30}px;width:550px;height:450px;z-index:${++winZ}`;winCount++;const titles={tasks:'📋 Tarefas',docs:'📄 Documentos',vault:'🔑 Cofre',chat:'💬 Chat',dashboard:'📊 Painel',notes:'📝 Notas',settings:'⚙️ Config'};win.innerHTML=`<div class="win-header"><h3>${titles[id]||id}</h3><div class="win-btns"><button class="win-minimize" onclick="minimizeWin('${id}')">_</button><button class="win-maximize" onclick="maximizeWin('${id}')">□</button><button class="win-close" onclick="closeWin('${id}')">×</button></div></div><div class="win-body">${getAppContent(id)}</div>`;document.getElementById('osDesktop').appendChild(win);openWindows[id]=win;makeDraggable(win);win.addEventListener('mousedown',()=>{win.style.zIndex=++winZ;});updateTaskbar();if(id==='tasks')renderTasks();if(id==='docs')renderDocs();if(id==='vault')renderVault();if(id==='chat')renderChat();if(id==='dashboard')renderDashboard();}
+function openApp(id){document.getElementById('osStartMenu').classList.remove('show');if(openWindows[id]){const w=openWindows[id];w.style.display='flex';w.style.zIndex=++winZ;updateTaskbar();return;}const win=document.createElement('div');win.className='os-window open';win.id='win-'+id;win.style.cssText=`top:${50+winCount*30}px;left:${80+winCount*30}px;width:550px;height:450px;z-index:${++winZ}`;winCount++;const titles={tasks:'📋 Tarefas',docs:'📄 Documentos',vault:'🔑 Cofre',chat:'💬 Chat',dashboard:'📊 Painel',notes:'📝 Notas',settings:'⚙️ Config',accounts:'👥 Contas'};win.innerHTML=`<div class="win-header"><h3>${titles[id]||id}</h3><div class="win-btns"><button class="win-minimize" onclick="minimizeWin('${id}')">_</button><button class="win-maximize" onclick="maximizeWin('${id}')">□</button><button class="win-close" onclick="closeWin('${id}')">×</button></div></div><div class="win-body">${getAppContent(id)}</div>`;document.getElementById('osDesktop').appendChild(win);openWindows[id]=win;makeDraggable(win);win.addEventListener('mousedown',()=>{win.style.zIndex=++winZ;});updateTaskbar();if(id==='tasks')renderTasks();if(id==='docs')renderDocs();if(id==='vault')renderVault();if(id==='chat')renderChat();if(id==='dashboard')renderDashboard();if(id==='accounts')renderAccountsList();}
 function minimizeWin(id){if(openWindows[id])openWindows[id].style.display='none';updateTaskbar();}
 function maximizeWin(id){if(openWindows[id])openWindows[id].classList.toggle('maximized');}
 function closeWin(id){if(openWindows[id]){openWindows[id].remove();delete openWindows[id];updateTaskbar();}}
@@ -476,6 +582,10 @@ if(app==='vault')return `<p style="background:#FEF3C7;color:#92400E;padding:10px
 if(app==='chat')return `<div class="chat-emojis">${['👍','❤️','😂','🎮','✅','❌','🔥','👋','🎉','💀','🤣','👀','💙','🫡','😎','🤝'].map(e=>`<button onclick="insertEmoji('${e}')">${e}</button>`).join('')}</div><div class="chat-toolbar"><button class="chat-tool-btn" onclick="document.getElementById('chatFileInput').click()">📎 Arquivos</button><button class="chat-tool-btn" onclick="document.getElementById('chatImageInput').click()">🖼️ Imagem</button><button class="chat-tool-btn" id="voiceRecordBtn" onclick="toggleVoiceRecord()">🎤 Áudio</button><input type="file" id="chatFileInput" multiple style="display:none" onchange="handleChatFiles(this.files)"><input type="file" id="chatImageInput" accept="image/*" multiple style="display:none" onchange="handleChatImages(this.files)"><span id="recordingTimer" style="font-size:.75rem;color:#EF4444;font-weight:700;display:none">⏺ 00:00</span></div><div class="chat-file-preview" id="chatFilePreview"></div><div class="chat-messages" id="chatMessages"></div><div class="chat-input-row"><input class="app-input" id="chatInput" placeholder="Digite uma mensagem..." onkeydown="if(event.key==='Enter')sendChat()" style="margin:0"><button class="app-btn" onclick="sendChat()">Enviar</button></div>`;
 if(app==='dashboard')return `<div id="dashContent"></div>`;
 if(app==='notes')return `<p style="margin-bottom:12px;color:var(--text2);font-size:.9rem">📝 Crie notas arrastáveis no desktop!</p><button class="app-btn" onclick="createStickyNote()">+ Nova Nota</button>`;
+if(app==='accounts'){
+  if(loggedUser?.role !== 'CEO' && loggedUser?.user !== 'Doom Reaper') return '<p style="color:#EF4444;padding:20px;text-align:center">Acesso negado. Apenas o CEO pode acessar.</p>';
+  return `<div style="margin-bottom:12px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">➕ Criar Nova Conta</h4><input class="app-input" id="newAccountUser" placeholder="Usuário (Login)"><input class="app-input" id="newAccountName" placeholder="Nome de Exibição"><input type="password" class="app-input" id="newAccountPass" placeholder="Senha"><select class="app-input" id="newAccountRole"><option value="Moderador">Moderador</option><option value="Admin">Admin</option></select><button class="app-btn" onclick="createNewAccount()">Criar Conta</button><p id="accountMsg" style="font-size:.85rem;margin-top:8px;display:none;font-weight:700"></p></div><div id="accountsList"></div>`;
+}
 if(app==='settings'){return `<div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">👤 Perfil</h4><div class="settings-group"><label>Nome</label><input type="text" class="app-input" id="settDisplayName" value="${loggedUser?loggedUser.name:''}" style="margin:0"></div><div class="settings-group"><label>Tema</label><select class="app-input" id="settTheme" onchange="toggleTheme()"><option value="light" ${!darkMode?'selected':''}>☀️ Claro</option><option value="dark" ${darkMode?'selected':''}>🌙 Escuro</option></select></div><button class="app-btn" onclick="saveSettings()">💾 Salvar</button></div><div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">🔑 Alterar Senha</h4><div class="settings-group"><label>Senha Atual</label><input type="password" class="app-input" id="settCurrentPass" style="margin:0"></div><div class="settings-group"><label>Nova Senha</label><input type="password" class="app-input" id="settNewPass" style="margin:0"></div><div class="settings-group"><label>Confirmar</label><input type="password" class="app-input" id="settConfirmPass" style="margin:0"></div><p id="passChangeMsg" style="font-size:.85rem;margin-bottom:8px;display:none"></p><button class="app-btn" onclick="changePassword()">🔐 Alterar</button></div><div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">☁️ GitHub Sync</h4><div class="settings-group"><label>Token</label><input type="password" class="app-input" id="settGHToken" value="${GITHUB_CONFIG.token}" style="margin:0"></div><div class="settings-group"><label>Gist ID</label><input type="text" class="app-input" id="settGHGist" value="${GITHUB_CONFIG.gistId}" style="margin:0"></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="app-btn" onclick="saveGitHubConfig()">💾 Salvar</button><button class="app-btn" onclick="testGitHubSync()" style="background:var(--blue-500)">🔄 Testar</button><button class="app-btn" onclick="createNewGistFromUI()" style="background:#34D399">➕ Novo Gist</button><button class="app-btn" onclick="forceUpload()" style="background:#F59E0B;color:#1E293B">⬆️ Upload</button><button class="app-btn" onclick="forceDownload()" style="background:#8B5CF6">⬇️ Download</button></div><p id="ghSyncMsg" style="font-size:.8rem;margin-top:8px;font-weight:700"></p></div><div style="padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4>⚠️ Perigo</h4><button class="app-btn danger" style="margin-top:8px" onclick="if(confirm('Limpar TODOS os dados locais?')){localStorage.clear();location.reload();}">🗑️ Limpar Dados</button></div>`;}
 return '<p>Em construção...</p>';}
 
@@ -511,7 +621,10 @@ chatMediaRecorder.onstop=()=>{
 clearInterval(window._recInterval);timer.style.display='none';btn.classList.remove('recording');btn.textContent='🎤 Áudio';chatIsRecording=false;
 const blob=new Blob(chatAudioChunks,{type:'audio/webm'});const reader=new FileReader();
 reader.onload=e=>{
-const chats=getChats();chats.push({user:loggedUser?.name||'Anônimo',text:'🎤 Mensagem de voz',time:new Date().toLocaleTimeString(),type:'audio',data:e.target.result});
+const chats=getChats();
+const msgObj = {user:loggedUser?.name||'Anônimo',text:'🎤 Mensagem de voz',time:new Date().toLocaleTimeString(),type:'audio',data:e.target.result};
+chats.push(msgObj);
+// Áudio também pode ser grande, por precaução salva localmente/GitHub para não sobrecarregar SQLite text/WebSocket
 saveChats(chats);renderChat();
 };reader.readAsDataURL(blob);
 stream.getTracks().forEach(t=>t.stop());
@@ -531,12 +644,23 @@ if(!text&&chatPendingFiles.length===0)return;
 const chats=getChats();
 if(chatPendingFiles.length>0){
 chatPendingFiles.forEach(f=>{
-chats.push({user:loggedUser?.name||'Anônimo',text:text||'',time:new Date().toLocaleTimeString(),type:f.type==='image'?'image':'file',fileName:f.name,fileSize:f.size,data:f.data});
+const msgObj = {user:loggedUser?.name||'Anônimo',text:text||'',time:new Date().toLocaleTimeString(),type:f.type==='image'?'image':'file',fileName:f.name,fileSize:f.size,data:f.data};
+chats.push(msgObj);
+// Se WebSocket estiver conectado, ignora o envio de grandes arquivos por socket por enquanto para evitar overload, mantém local/gist
 });
 chatPendingFiles=[];updateFilePreview();
 }
-if(text){chats.push({user:loggedUser?.name||'Anônimo',text,time:new Date().toLocaleTimeString(),type:'text'});}
-saveChats(chats);input.value='';renderChat();
+if(text){
+    const msgObj = {user:loggedUser?.name||'Anônimo',text,time:new Date().toLocaleTimeString(),type:'text'};
+    if (socket && socket.connected) {
+        socket.emit('sendMessage', { sender: msgObj.user, content: msgObj.text, type: 'text', role: loggedUser?.role });
+    } else {
+        chats.push(msgObj);
+    }
+}
+if(!socket || !socket.connected) { saveChats(chats); } // Se estiver offline, salva localmente
+input.value='';
+if(!socket || !socket.connected) { renderChat(); }
 }
 function insertEmoji(e){const i=document.getElementById('chatInput');if(i)i.value+=e;}
 function renderChat(){
@@ -593,6 +717,39 @@ async function testGitHubSync(){const t=document.getElementById('settGHToken').v
 async function createNewGistFromUI(){const t=document.getElementById('settGHToken').value.trim();if(!t)return;GITHUB_CONFIG.token=t;localStorage.setItem('github_token',t);const id=await createNewGist();if(id){document.getElementById('settGHGist').value=id;GITHUB_CONFIG.gistId=id;localStorage.setItem('github_gist_id',id);startAutoSync();const m=document.getElementById('ghSyncMsg');if(m){m.style.color='#34D399';m.textContent='✅ Gist: '+id;}}}
 async function forceUpload(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId)return;lastSyncData='';await syncToGitHub();}
 async function forceDownload(){if(!GITHUB_CONFIG.token||!GITHUB_CONFIG.gistId)return;const ok=await syncFromGitHub();if(ok)refreshOpenApps();}
+
+/* Accounts */
+function createNewAccount(){
+  const u=document.getElementById('newAccountUser').value.trim();
+  const n=document.getElementById('newAccountName').value.trim();
+  const p=document.getElementById('newAccountPass').value;
+  const r=document.getElementById('newAccountRole').value;
+  const msg=document.getElementById('accountMsg');
+  msg.style.display='block';
+  if(!u||!n||!p){msg.style.color='#EF4444';msg.textContent='❌ Preencha todos os campos!';return;}
+  const users=getUsers();
+  if(users.find(x=>x.user.toLowerCase()===u.toLowerCase())){msg.style.color='#EF4444';msg.textContent='❌ Usuário já existe!';return;}
+  const customU=getCustomUsers();
+  customU.push({user:u,name:n,pass:p,role:r});
+  saveCustomUsers(customU);
+  msg.style.color='#34D399';msg.textContent='✅ Conta criada com sucesso!';
+  ['newAccountUser','newAccountName','newAccountPass'].forEach(id=>document.getElementById(id).value='');
+  renderAccountsList();
+}
+function renderAccountsList(){
+  const list=document.getElementById('accountsList');
+  if(!list)return;
+  const users=getUsers();
+  list.innerHTML=`<h4 style="margin-bottom:12px">👥 Contas Existentes</h4>`+users.map(u=>`<div class="app-list-item"><div class="item-content"><h4>${u.name}</h4><p>👤 Usuário: ${u.user} | 🏷️ Cargo: ${u.role}</p></div>${u.role!=='CEO'?`<button class="app-btn small danger" onclick="deleteAccount('${u.user}')">🗑️</button>`:''}</div>`).join('');
+}
+function deleteAccount(user){
+  if(!confirm(`Deletar a conta ${user}?`))return;
+  let customU=getCustomUsers();
+  customU=customU.filter(u=>u.user!==user);
+  saveCustomUsers(customU);
+  renderAccountsList();
+}
+
 /* Init */
 const savedSession=localStorage.getItem('os_session');if(savedSession){try{loggedUser=JSON.parse(savedSession);}catch(e){}}
 applyLang();
