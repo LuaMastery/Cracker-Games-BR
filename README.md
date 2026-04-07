@@ -423,29 +423,25 @@ php -S localhost:8000
 
 ## 🔐 Contas de Acesso (Workspace)
 
-> ⚠️ **Nota:** Estas contas são hardcoded para fins de demonstração. Em um ambiente de produção, a autenticação seria feita via backend seguro.
+> ⚠️ **Nota de Segurança:** As credenciais de acesso são gerenciadas de forma segura via hash SHA-256. Nunca compartilhe suas senhas e evite salvar credenciais em navegadores públicos.
 
-### Contas de Administrador
+### Acesso ao Workspace
 
-| Usuário | Senha | Cargo | Nome |
-|---|---|---|---|
-| `DoomReaper` | `cracker2024` | CEO | Doom Reaper |
-| `Muguetos` | `admin2024` | Admin | MUGUETO's |
-| `MrSuco` | `admin2024` | Admin | Mr. Suco |
-
-### Contas de Moderador
-
-| Usuário | Senha | Cargo | Nome |
-|---|---|---|---|
-| `Moderador1` | `mod2024` | Moderador | Moderador 1 |
-| `Moderador2` | `mod2024` | Moderador | Moderador 2 |
+O acesso à Área de Trabalho restrita requer autenticação com credenciais válidas. Para solicitar acesso, entre em contato com a administração via email: **rhuancillo@gmail.com**
 
 ### Persistência de Sessão
 
-- ✅ A sessão é salva no `localStorage`
+- ✅ A sessão é salva de forma criptografada no `localStorage`
 - ✅ O usuário permanece logado ao recarregar a página
 - ✅ Para sair, clique no botão **"Sair"** na taskbar do CrackerOS
-- ✅ Os dados do workspace (tarefas, documentos, etc.) são persistentes
+- ✅ Os dados do workspace são sincronizados com GitHub Gist (opcional)
+
+### Segurança Implementada
+
+- 🔒 Hash SHA-256 para todas as senhas
+- 🛡️ Rate limiting: máximo 5 tentativas de login a cada 15 minutos
+- 🔐 Criptografia AES para dados sensíveis no localStorage
+- 🚫 Proteção contra força bruta no login
 
 ---
 
