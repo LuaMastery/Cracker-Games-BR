@@ -2545,252 +2545,47 @@
                 err.style.display = 'block';
                 return;
             }
-            document.getElementById('mainSite').style.display = 'none';
-            document.getElementById('siteFooter').style.display = 'none';
-            document.querySelector('.ticker').style.display = 'none';
-            document.getElementById('navbar').style.display = 'none';
-            document.getElementById('backTop').style.display = 'none';
-            document.getElementById('cracker-os').classList.add('active');
-            document.getElementById('osUser').textContent = `${loggedUser.name} (${loggedUser.role})`;
 
-            if (loggedUser.role === 'CEO' || loggedUser.user === 'Doom Reaper') {
-                document.getElementById('icon-accounts').style.display = 'flex';
-                document.getElementById('start-accounts').style.display = 'flex';
-            } else {
-                document.getElementById('icon-accounts').style.display = 'none';
-                document.getElementById('start-accounts').style.display = 'none';
+            // Verifica rate limiting
+            const rateCheck = SECURITY.canAttemptLogin();
+            if (!rateCheck.allowed) {
+                err.textContent = `Muitas tentativas! Aguarde ${rateCheck.remainingMinutes} minutos.`;
+                err.style.display = 'block';
+                return;
             }
 
-            startClock();
-            loadNotes();
-            initSocket(); // Inicializa o WebSocket para Chat Real-Time
-            if (GITHUB_CONFIG.token && GITHUB_CONFIG.gistId) {
-                syncFromGitHub().then(ok => { if (ok) refreshOpenApps(); });
-                startAutoSync();
-            }
-        }
-
-        function initSocket() {
-            if (typeof io !== 'undefined') {
-                try {
-                    socket = io(BACKEND_URL);
-                    socket.on('connect', () => console.log('Conectado ao servidor real-time!'));
-                    socket.on('chatHistory', (msgs) => {
-                        const formattedMsgs = msgs.map(m => ({
-                            user: m.sender,
-                            text: m.content,
-                            type: m.type,
-                            time: new Date(m.timestamp).toLocaleTimeString()
-                        }));
-                        localStorage.setItem('os_chat', JSON.stringify(formattedMsgs));
-                        if (openWindows.chat) renderChat();
-                    });
-                    socket.on('newMessage', (m) => {
-                        const chats = getChats();
-                        chats.push({
-                            user: m.sender,
-                            text: m.content,
-                            type: m.type,
-                            time: new Date(m.timestamp).toLocaleTimeString()
-                        });
-                        localStorage.setItem('os_chat', JSON.stringify(chats));
-                        if (openWindows.chat) renderChat();
-                    });
-                    socket.on('workspaceUpdate', (data) => {
-                        // Para futuras atualizações automáticas de tarefas e docs
-                    });
-                } catch (e) {
-                    console.log('Servidor WebSocket offline, operando localmente.');
+            try {
+                // Busca usuário
+                const found = getUsers().find(x => x.user === u);
+                if (!found) {
+                    SECURITY.recordAttempt(false);
+                    err.textContent = "Usuário ou senha incorretos!";
+                    err.style.display = 'block';
+                    return;
                 }
-            }
-        }
 
-        function exitOS() { document.getElementById('cracker-os').classList.remove('active'); document.getElementById('mainSite').style.display = ''; document.getElementById('siteFooter').style.display = ''; document.querySelector('.ticker').style.display = ''; document.getElementById('navbar').style.display = ''; document.querySelectorAll('.os-window').forEach(w => w.remove()); document.getElementById('taskbarItems').innerHTML = ''; openWindows_clear(); }
-        function openWindows_clear() { for (const k in openWindows) delete openWindows[k]; }
-        function startClock() { setInterval(() => { document.getElementById('osClock').textContent = new Date().toLocaleTimeString(); }, 1000); }
-        function toggleStartMenu() { document.getElementById('osStartMenu').classList.toggle('show'); }
-        let winZ = 100, winCount = 0; const openWindows = {};
-        function openApp(id) { document.getElementById('osStartMenu').classList.remove('show'); if (openWindows[id]) { const w = openWindows[id]; w.style.display = 'flex'; w.style.zIndex = ++winZ; updateTaskbar(); return; } const win = document.createElement('div'); win.className = 'os-window open'; win.id = 'win-' + id; win.style.cssText = `top:${50 + winCount * 30}px;left:${80 + winCount * 30}px;width:550px;height:450px;z-index:${++winZ}`; winCount++; const titles = { tasks: '📋 Tarefas', docs: '📄 Documentos', vault: '🔑 Cofre', chat: '💬 Chat', dashboard: '📊 Painel', notes: '📝 Notas', settings: '⚙️ Config', accounts: '👥 Contas' }; win.innerHTML = `<div class="win-header"><h3>${titles[id] || id}</h3><div class="win-btns"><button class="win-minimize" onclick="minimizeWin('${id}')">_</button><button class="win-maximize" onclick="maximizeWin('${id}')">□</button><button class="win-close" onclick="closeWin('${id}')">×</button></div></div><div class="win-body">${getAppContent(id)}</div>`; document.getElementById('osDesktop').appendChild(win); openWindows[id] = win; makeDraggable(win); win.addEventListener('mousedown', () => { win.style.zIndex = ++winZ; }); updateTaskbar(); if (id === 'tasks') renderTasks(); if (id === 'docs') renderDocs(); if (id === 'vault') renderVault(); if (id === 'chat') renderChat(); if (id === 'dashboard') renderDashboard(); if (id === 'accounts') renderAccountsList(); }
-        function minimizeWin(id) { if (openWindows[id]) openWindows[id].style.display = 'none'; updateTaskbar(); }
-        function maximizeWin(id) { if (openWindows[id]) openWindows[id].classList.toggle('maximized'); }
-        function closeWin(id) { if (openWindows[id]) { openWindows[id].remove(); delete openWindows[id]; updateTaskbar(); } }
-        function updateTaskbar() { const tb = document.getElementById('taskbarItems'); tb.innerHTML = Object.keys(openWindows).map(id => { const vis = openWindows[id].style.display !== 'none'; return `<button class="os-taskbar-item ${vis ? 'active' : ''}" onclick="toggleWinFromTaskbar('${id}')">${id}</button>`; }).join(''); }
-        function toggleWinFromTaskbar(id) { const w = openWindows[id]; if (!w) return; if (w.style.display === 'none') { w.style.display = 'flex'; w.style.zIndex = ++winZ; } else w.style.display = 'none'; updateTaskbar(); }
-        function makeDraggable(el) { const h = el.querySelector('.win-header'); let ox, oy, sx, sy, d = false; h.addEventListener('mousedown', e => { if (e.target.tagName === 'BUTTON') return; d = true; ox = e.clientX; oy = e.clientY; sx = el.offsetLeft; sy = el.offsetTop; }); document.addEventListener('mousemove', e => { if (!d) return; el.style.left = (sx + e.clientX - ox) + 'px'; el.style.top = (sy + e.clientY - oy) + 'px'; }); document.addEventListener('mouseup', () => d = false); h.addEventListener('touchstart', e => { if (e.target.tagName === 'BUTTON') return; const t = e.touches[0]; d = true; ox = t.clientX; oy = t.clientY; sx = el.offsetLeft; sy = el.offsetTop; }, { passive: true }); document.addEventListener('touchmove', e => { if (!d) return; const t = e.touches[0]; el.style.left = (sx + t.clientX - ox) + 'px'; el.style.top = (sy + t.clientY - oy) + 'px'; }, { passive: true }); document.addEventListener('touchend', () => d = false); }
-
-        /* ============== CHAT WITH FILES, AUDIO, IMAGES ============== */
-        let chatPendingFiles = [];
-        let chatMediaRecorder = null;
-        let chatAudioChunks = [];
-        let chatIsRecording = false;
-
-        function getAppContent(app) {
-            if (app === 'tasks') return `<div style="margin-bottom:12px"><input class="app-input" id="taskTitle" placeholder="Título da tarefa"><input class="app-input" id="taskDesc" placeholder="Descrição"><select class="app-input" id="taskAssign"><option value="">Responsável...</option>${USERS.map(u => `<option value="${u.name}">${u.name}</option>`).join('')}</select><button class="app-btn" onclick="addTask()">Adicionar</button></div><div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap"><button class="app-btn small" onclick="filterTasks('all')">Todas</button><button class="app-btn small" onclick="filterTasks('pending')">Pendentes</button><button class="app-btn small" onclick="filterTasks('progress')">Em Progresso</button><button class="app-btn small" onclick="filterTasks('done')">Concluídas</button></div><div id="taskList"></div>`;
-            if (app === 'docs') return `<div style="margin-bottom:12px"><input class="app-input" id="docTitle" placeholder="Título"><textarea class="app-textarea" id="docContent" placeholder="Conteúdo..."></textarea><button class="app-btn" onclick="addDoc()">Salvar</button></div><div id="docList"></div>`;
-            if (app === 'vault') return `<p style="background:#FEF3C7;color:#92400E;padding:10px;border-radius:8px;font-size:.8rem;margin-bottom:12px">⚠️ Cofre de demonstração. Use um gerenciador profissional em produção.</p><div style="margin-bottom:12px"><input class="app-input" id="vaultService" placeholder="Serviço"><input class="app-input" id="vaultUser" placeholder="Usuário"><input class="app-input" id="vaultPass" placeholder="Senha"><input class="app-input" id="vaultNotes" placeholder="Notas"><button class="app-btn" onclick="addVaultEntry()">Adicionar</button></div><div id="vaultList"></div>`;
-            if (app === 'chat') return `<div class="chat-emojis">${['👍', '❤️', '😂', '🎮', '✅', '❌', '🔥', '👋', '🎉', '💀', '🤣', '👀', '💙', '🫡', '😎', '🤝'].map(e => `<button onclick="insertEmoji('${e}')">${e}</button>`).join('')}</div><div class="chat-toolbar"><button class="chat-tool-btn" onclick="document.getElementById('chatFileInput').click()">📎 Arquivos</button><button class="chat-tool-btn" onclick="document.getElementById('chatImageInput').click()">🖼️ Imagem</button><button class="chat-tool-btn" id="voiceRecordBtn" onclick="toggleVoiceRecord()">🎤 Áudio</button><input type="file" id="chatFileInput" multiple style="display:none" onchange="handleChatFiles(this.files)"><input type="file" id="chatImageInput" accept="image/*" multiple style="display:none" onchange="handleChatImages(this.files)"><span id="recordingTimer" style="font-size:.75rem;color:#EF4444;font-weight:700;display:none">⏺ 00:00</span></div><div class="chat-file-preview" id="chatFilePreview"></div><div class="chat-messages" id="chatMessages"></div><div class="chat-input-row"><input class="app-input" id="chatInput" placeholder="Digite uma mensagem..." onkeydown="if(event.key==='Enter')sendChat()" style="margin:0"><button class="app-btn" onclick="sendChat()">Enviar</button></div>`;
-            if (app === 'dashboard') return `<div id="dashContent"></div>`;
-            if (app === 'notes') return `<p style="margin-bottom:12px;color:var(--text2);font-size:.9rem">📝 Crie notas arrastáveis no desktop!</p><button class="app-btn" onclick="createStickyNote()">+ Nova Nota</button>`;
-            if (app === 'accounts') {
-                if (loggedUser?.role !== 'CEO' && loggedUser?.user !== 'Doom Reaper') return '<p style="color:#EF4444;padding:20px;text-align:center">Acesso negado. Apenas o CEO pode acessar.</p>';
-                return `<div style="margin-bottom:12px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">➕ Criar Nova Conta</h4><input class="app-input" id="newAccountUser" placeholder="Usuário (Login)"><input class="app-input" id="newAccountName" placeholder="Nome de Exibição"><input type="password" class="app-input" id="newAccountPass" placeholder="Senha"><select class="app-input" id="newAccountRole"><option value="Moderador">Moderador</option><option value="Admin">Admin</option></select><button class="app-btn" onclick="createNewAccount()">Criar Conta</button><p id="accountMsg" style="font-size:.85rem;margin-top:8px;display:none;font-weight:700"></p></div><div id="accountsList"></div>`;
-            }
-            if (app === 'settings') { return `<div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">👤 Perfil</h4><div class="settings-group"><label>Nome</label><input type="text" class="app-input" id="settDisplayName" value="${loggedUser ? loggedUser.name : ''}" style="margin:0"></div><div class="settings-group"><label>Tema</label><select class="app-input" id="settTheme" onchange="toggleTheme()"><option value="light" ${!darkMode ? 'selected' : ''}>☀️ Claro</option><option value="dark" ${darkMode ? 'selected' : ''}>🌙 Escuro</option></select></div><button class="app-btn" onclick="saveSettings()">💾 Salvar</button></div><div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">🔑 Alterar Senha</h4><div class="settings-group"><label>Senha Atual</label><input type="password" class="app-input" id="settCurrentPass" style="margin:0"></div><div class="settings-group"><label>Nova Senha</label><input type="password" class="app-input" id="settNewPass" style="margin:0"></div><div class="settings-group"><label>Confirmar</label><input type="password" class="app-input" id="settConfirmPass" style="margin:0"></div><p id="passChangeMsg" style="font-size:.85rem;margin-bottom:8px;display:none"></p><button class="app-btn" onclick="changePassword()">🔐 Alterar</button></div><div style="margin-bottom:24px;padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4 style="margin-bottom:12px">☁️ GitHub Sync</h4><div class="settings-group"><label>Token</label><input type="password" class="app-input" id="settGHToken" value="${GITHUB_CONFIG.token}" style="margin:0"></div><div class="settings-group"><label>Gist ID</label><input type="text" class="app-input" id="settGHGist" value="${GITHUB_CONFIG.gistId}" style="margin:0"></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="app-btn" onclick="saveGitHubConfig()">💾 Salvar</button><button class="app-btn" onclick="testGitHubSync()" style="background:var(--blue-500)">🔄 Testar</button><button class="app-btn" onclick="createNewGistFromUI()" style="background:#34D399">➕ Novo Gist</button><button class="app-btn" onclick="forceUpload()" style="background:#F59E0B;color:#1E293B">⬆️ Upload</button><button class="app-btn" onclick="forceDownload()" style="background:#8B5CF6">⬇️ Download</button></div><p id="ghSyncMsg" style="font-size:.8rem;margin-top:8px;font-weight:700"></p></div><div style="padding:16px;background:var(--bg2);border-radius:10px;border:1px solid var(--card-border)"><h4>⚠️ Perigo</h4><button class="app-btn danger" style="margin-top:8px" onclick="if(confirm('Limpar TODOS os dados locais?')){localStorage.clear();location.reload();}">🗑️ Limpar Dados</button></div>`; }
-            return '<p>Em construção...</p>';
-        }
-
-        /* Chat file handling */
-        function handleChatFiles(files) {
-            chatPendingFiles = [];
-            Array.from(files).forEach(f => { const reader = new FileReader(); reader.onload = e => { chatPendingFiles.push({ name: f.name, size: f.size, type: f.type, data: e.target.result }); updateFilePreview(); }; reader.readAsDataURL(f); });
-        }
-        function handleChatImages(files) {
-            Array.from(files).forEach(f => { const reader = new FileReader(); reader.onload = e => { chatPendingFiles.push({ name: f.name, size: f.size, type: 'image', data: e.target.result }); updateFilePreview(); }; reader.readAsDataURL(f); });
-        }
-        function updateFilePreview() {
-            const prev = document.getElementById('chatFilePreview'); if (!prev) return;
-            if (chatPendingFiles.length === 0) { prev.style.display = 'none'; return; }
-            prev.style.display = 'block';
-            prev.innerHTML = chatPendingFiles.map((f, i) => `<div class="file-item"><span class="file-name">${f.type === 'image' ? '🖼️' : '📎'} ${f.name} (${(f.size / 1024).toFixed(1)}KB)</span><button class="app-btn small danger" onclick="removePendingFile(${i})">✕</button></div>`).join('');
-        }
-        function removePendingFile(i) { chatPendingFiles.splice(i, 1); updateFilePreview(); }
-
-        /* Voice recording */
-        function toggleVoiceRecord() {
-            const btn = document.getElementById('voiceRecordBtn');
-            const timer = document.getElementById('recordingTimer');
-            if (!chatIsRecording) {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('Seu navegador não suporta gravação de áudio.'); return; }
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                    chatMediaRecorder = new MediaRecorder(stream); chatAudioChunks = []; chatIsRecording = true;
-                    btn.classList.add('recording'); btn.textContent = '⏹ Parar';
-                    timer.style.display = 'inline'; let sec = 0;
-                    window._recInterval = setInterval(() => { sec++; const m = Math.floor(sec / 60).toString().padStart(2, '0'); const s = (sec % 60).toString().padStart(2, '0'); timer.textContent = `⏺ ${m}:${s}`; }, 1000);
-                    chatMediaRecorder.ondataavailable = e => { chatAudioChunks.push(e.data); };
-                    chatMediaRecorder.onstop = () => {
-                        clearInterval(window._recInterval); timer.style.display = 'none'; btn.classList.remove('recording'); btn.textContent = '🎤 Áudio'; chatIsRecording = false;
-                        const blob = new Blob(chatAudioChunks, { type: 'audio/webm' }); const reader = new FileReader();
-                        reader.onload = e => {
-                            const chats = getChats();
-                            const msgObj = { user: loggedUser?.name || 'Anônimo', text: '🎤 Mensagem de voz', time: new Date().toLocaleTimeString(), type: 'audio', data: e.target.result };
-                            chats.push(msgObj);
-                            // Áudio também pode ser grande, por precaução salva localmente/GitHub para não sobrecarregar SQLite text/WebSocket
-                            saveChats(chats); renderChat();
-                        }; reader.readAsDataURL(blob);
-                        stream.getTracks().forEach(t => t.stop());
-                    };
-                    chatMediaRecorder.start();
-                }).catch(err => { alert('Permissão de microfone negada.'); });
-            } else {
-                if (chatMediaRecorder && chatMediaRecorder.state === 'recording') chatMediaRecorder.stop();
-            }
-        }
-
-        function getChats() { return JSON.parse(localStorage.getItem('os_chat') || '[]'); }
-        function saveChats(c) { localStorage.setItem('os_chat', JSON.stringify(c)); syncAfterChange(); }
-        function sendChat() {
-            const input = document.getElementById('chatInput'); const text = input.value.trim();
-            if (!text && chatPendingFiles.length === 0) return;
-            const chats = getChats();
-            if (chatPendingFiles.length > 0) {
-                chatPendingFiles.forEach(f => {
-                    const msgObj = { user: loggedUser?.name || 'Anônimo', text: text || '', time: new Date().toLocaleTimeString(), type: f.type === 'image' ? 'image' : 'file', fileName: f.name, fileSize: f.size, data: f.data };
-                    chats.push(msgObj);
-                    // Se WebSocket estiver conectado, ignora o envio de grandes arquivos por socket por enquanto para evitar overload, mantém local/gist
-                });
-                chatPendingFiles = []; updateFilePreview();
-            }
-            if (text) {
-                const msgObj = { user: loggedUser?.name || 'Anônimo', text, time: new Date().toLocaleTimeString(), type: 'text' };
-                if (socket && socket.connected) {
-                    socket.emit('sendMessage', { sender: msgObj.user, content: msgObj.text, type: 'text', role: loggedUser?.role });
-                } else {
-                    chats.push(msgObj);
+                // Verifica hash da senha
+                const inputHash = await SECURITY.hashPassword(p);
+                if (found.passHash !== inputHash) {
+                    SECURITY.recordAttempt(false);
+                    err.textContent = "Usuário ou senha incorretos!";
+                    err.style.display = 'block';
+                    return;
                 }
+
+                // Login bem-sucedido
+                SECURITY.recordAttempt(true);
+                loggedUser = found;
+                await SECURITY.saveEncryptedSession(loggedUser, p);
+                localStorage.setItem('os_session', JSON.stringify(loggedUser));
+                closeLogin();
+                enterOS();
+
+            } catch (e) {
+                console.error('Erro no login:', e);
+                err.textContent = "Erro no sistema. Tente novamente.";
+                err.style.display = 'block';
             }
-            if (!socket || !socket.connected) { saveChats(chats); } // Se estiver offline, salva localmente
-            input.value = '';
-            if (!socket || !socket.connected) { renderChat(); }
-        }
-        function insertEmoji(e) { const i = document.getElementById('chatInput'); if (i) i.value += e; }
-        function renderChat() {
-            const el = document.getElementById('chatMessages'); if (!el) return;
-            const chats = getChats();
-            el.innerHTML = chats.map(c => {
-                let content = `<span class="msg-user">${c.user}</span> <span class="msg-time">${c.time}</span>`;
-                if (c.text) content += `<div class="msg-text">${escapeHtml(c.text)}</div>`;
-                if (c.type === 'file') content += `<div class="msg-file" onclick="downloadChatFile('${c.fileName}','${c.data}')">📎 ${c.fileName} (${(c.fileSize / 1024).toFixed(1)}KB) ⬇️</div>`;
-                if (c.type === 'image') content += `<img class="msg-img" src="${c.data}" alt="${c.fileName || 'image'}" onclick="window.open(this.src)">`;
-                if (c.type === 'audio') content += `<div class="msg-audio"><audio controls src="${c.data}"></audio></div>`;
-                return `<div class="chat-msg">${content}</div>`;
-            }).join('') || '<p style="color:var(--text3);text-align:center;padding:20px">Nenhuma mensagem ainda. 💬</p>';
-            el.scrollTop = el.scrollHeight;
-        }
-        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-        function downloadChatFile(name, data) { const a = document.createElement('a'); a.href = data; a.download = name; a.click(); }
-
-        /* Tasks */
-        function getTasks() { return JSON.parse(localStorage.getItem('os_tasks') || '[]'); } function saveTasks(t) { localStorage.setItem('os_tasks', JSON.stringify(t)); syncAfterChange(); }
-        function addTask() { const title = document.getElementById('taskTitle').value.trim(); if (!title) return; const tasks = getTasks(); tasks.push({ id: Date.now(), title, desc: document.getElementById('taskDesc').value, assign: document.getElementById('taskAssign').value, status: 'pending', created: new Date().toLocaleDateString(), completed: null }); saveTasks(tasks); document.getElementById('taskTitle').value = ''; document.getElementById('taskDesc').value = ''; renderTasks(); }
-        let taskFilter = 'all'; function filterTasks(f) { taskFilter = f; renderTasks(); }
-        function renderTasks() { const list = document.getElementById('taskList'); if (!list) return; let tasks = getTasks(); if (taskFilter !== 'all') tasks = tasks.filter(t => t.status === taskFilter || (taskFilter === 'progress' && t.status === 'progress')); const sc = { pending: 'task-pending', progress: 'task-progress', done: 'task-done' }; const sl = { pending: '⬜ Pendente', progress: '🔄 Em Progresso', done: '✅ Concluído' }; list.innerHTML = tasks.map(t => `<div class="app-list-item"><div class="item-content"><h4>${t.title}</h4><p>${t.desc || ''}</p><p>👤 ${t.assign || '—'} | 📅 ${t.created}</p><span class="task-status ${sc[t.status]}">${sl[t.status]}</span>${t.completed ? ' | ' + t.completed : ''}</div><div style="display:flex;flex-direction:column;gap:4px"><select class="app-input" style="padding:4px;font-size:.75rem;margin:0;min-width:100px" onchange="changeTaskStatus(${t.id},this.value)"><option value="pending" ${t.status === 'pending' ? 'selected' : ''}>Pendente</option><option value="progress" ${t.status === 'progress' ? 'selected' : ''}>Em Progresso</option><option value="done" ${t.status === 'done' ? 'selected' : ''}>Concluído</option></select><button class="app-btn small danger" onclick="deleteTask(${t.id})">🗑️</button></div></div>`).join('') || '<p style="color:var(--text3);text-align:center">Sem tarefas.</p>'; }
-        function changeTaskStatus(id, s) { const tasks = getTasks(); const t = tasks.find(x => x.id === id); if (t) { t.status = s; if (s === 'done') t.completed = new Date().toLocaleDateString(); } saveTasks(tasks); renderTasks(); }
-        function deleteTask(id) { saveTasks(getTasks().filter(t => t.id !== id)); renderTasks(); }
-        /* Docs */
-        function getDocs() { return JSON.parse(localStorage.getItem('os_docs') || '[]'); } function saveDocs(d) { localStorage.setItem('os_docs', JSON.stringify(d)); syncAfterChange(); }
-        function addDoc() { const title = document.getElementById('docTitle').value.trim(); const content = document.getElementById('docContent').value.trim(); if (!title) return; const docs = getDocs(); docs.push({ id: Date.now(), title, content, date: new Date().toLocaleDateString(), author: loggedUser?.name || '?' }); saveDocs(docs); document.getElementById('docTitle').value = ''; document.getElementById('docContent').value = ''; renderDocs(); }
-        function renderDocs() { const list = document.getElementById('docList'); if (!list) return; list.innerHTML = getDocs().map(d => `<div class="app-list-item"><div class="item-content"><h4>${d.title}</h4><p>${d.content.substring(0, 100)}${d.content.length > 100 ? '...' : ''}</p><p style="font-size:.75rem;color:var(--text3)">✍️ ${d.author} | 📅 ${d.date}</p></div><button class="app-btn small danger" onclick="deleteDoc(${d.id})">🗑️</button></div>`).join('') || '<p style="color:var(--text3);text-align:center">Sem documentos.</p>'; }
-        function deleteDoc(id) { saveDocs(getDocs().filter(d => d.id !== id)); renderDocs(); }
-        /* Vault */
-        function getVault() { return JSON.parse(localStorage.getItem('os_vault') || '[]'); } function saveVault(v) { localStorage.setItem('os_vault', JSON.stringify(v)); syncAfterChange(); }
-        function addVaultEntry() { const s = document.getElementById('vaultService').value.trim(); if (!s) return; const v = getVault(); v.push({ id: Date.now(), service: s, user: document.getElementById('vaultUser').value, pass: document.getElementById('vaultPass').value, notes: document.getElementById('vaultNotes').value, show: false }); saveVault(v);['vaultService', 'vaultUser', 'vaultPass', 'vaultNotes'].forEach(i => document.getElementById(i).value = ''); renderVault(); }
-        function renderVault() { const list = document.getElementById('vaultList'); if (!list) return; list.innerHTML = getVault().map(v => `<div class="app-list-item"><div class="item-content"><h4>🔐 ${v.service}</h4><p>👤 ${v.user}</p><div class="password-row"><span class="password-hidden">${v.show ? v.pass : '••••••••'}</span><button class="app-btn small" onclick="toggleVaultPass(${v.id})">${v.show ? '🙈' : '👁️'}</button><button class="app-btn small" onclick="copyVaultPass(${v.id})">📋</button></div>${v.notes ? `<p style="font-size:.8rem;margin-top:4px;color:var(--text3)">📝 ${v.notes}</p>` : ''}</div><button class="app-btn small danger" onclick="deleteVaultEntry(${v.id})">🗑️</button></div>`).join('') || '<p style="color:var(--text3);text-align:center">Cofre vazio.</p>'; }
-        function toggleVaultPass(id) { const v = getVault(); const e = v.find(x => x.id === id); if (e) e.show = !e.show; saveVault(v); renderVault(); }
-        function copyVaultPass(id) { const v = getVault(); const e = v.find(x => x.id === id); if (e) navigator.clipboard.writeText(e.pass); }
-        function deleteVaultEntry(id) { saveVault(getVault().filter(v => v.id !== id)); renderVault(); }
-        /* Dashboard */
-        function renderDashboard() { const el = document.getElementById('dashContent'); if (!el) return; const tasks = getTasks(); const p = tasks.filter(t => t.status === 'pending').length; const pr = tasks.filter(t => t.status === 'progress').length; const d = tasks.filter(t => t.status === 'done').length; const docs = getDocs().length; const mx = Math.max(p, pr, d, 1); el.innerHTML = `<div class="dashboard-grid"><div class="dash-card"><div class="dash-num">${p}</div><div class="dash-label">⬜ Pendentes</div></div><div class="dash-card"><div class="dash-num">${pr}</div><div class="dash-label">🔄 Progresso</div></div><div class="dash-card"><div class="dash-num">${d}</div><div class="dash-label">✅ Concluídas</div></div><div class="dash-card"><div class="dash-num">${docs}</div><div class="dash-label">📄 Documentos</div></div></div><h4 style="margin-bottom:8px">Tarefas por Status</h4><div class="bar-chart"><div class="bar" style="height:${(p / mx) * 100}%"><span>Pend.</span></div><div class="bar" style="height:${(pr / mx) * 100}%;background:var(--blue-400)"><span>Prog.</span></div><div class="bar" style="height:${(d / mx) * 100}%;background:var(--blue-300)"><span>Feito</span></div></div><h4 style="margin-top:24px;margin-bottom:8px">Equipe</h4>${USERS.map(u => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0"><span style="width:8px;height:8px;border-radius:50%;background:#34D399;display:inline-block"></span><span style="font-weight:600;font-size:.9rem">${u.name}</span><span style="font-size:.8rem;color:var(--text3)">${u.role}</span></div>`).join('')}`; }
-        /* Notes */
-        function getNotes() { return JSON.parse(localStorage.getItem('os_notes') || '[]'); } function saveNotes(n) { localStorage.setItem('os_notes', JSON.stringify(n)); }
-        function loadNotes() { getNotes().forEach(n => createNoteEl(n)); }
-        function createStickyNote() { const colors = ['#DBEAFE', '#BFDBFE', '#93C5FD', '#EFF6FF']; const note = { id: Date.now(), text: 'Nova nota...', x: 100 + Math.random() * 200, y: 100 + Math.random() * 200, color: colors[Math.floor(Math.random() * colors.length)] }; const notes = getNotes(); notes.push(note); saveNotes(notes); createNoteEl(note); }
-        function createNoteEl(n) { const el = document.createElement('div'); el.className = 'sticky-note'; el.style.cssText = `left:${n.x}px;top:${n.y}px;background:${n.color};z-index:${++winZ}`; el.id = 'note-' + n.id; el.innerHTML = `<button class="note-close" onclick="deleteNote(${n.id})">×</button><textarea oninput="updateNoteText(${n.id},this.value)">${n.text}</textarea>`; document.getElementById('osDesktop').appendChild(el); makeNoteDraggable(el, n.id); }
-        function makeNoteDraggable(el, id) { let ox, oy, sx, sy, d = false; el.addEventListener('mousedown', e => { if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return; d = true; ox = e.clientX; oy = e.clientY; sx = el.offsetLeft; sy = el.offsetTop; el.style.zIndex = ++winZ; }); document.addEventListener('mousemove', e => { if (!d) return; el.style.left = (sx + e.clientX - ox) + 'px'; el.style.top = (sy + e.clientY - oy) + 'px'; }); document.addEventListener('mouseup', () => { if (d) { d = false; updateNotePos(id, el.offsetLeft, el.offsetTop); } }); }
-        function updateNoteText(id, t) { const n = getNotes(); const f = n.find(x => x.id === id); if (f) f.text = t; saveNotes(n); }
-        function updateNotePos(id, x, y) { const n = getNotes(); const f = n.find(x2 => x2.id === id); if (f) { f.x = x; f.y = y; } saveNotes(n); }
-        function deleteNote(id) { saveNotes(getNotes().filter(n => n.id !== id)); const el = document.getElementById('note-' + id); if (el) el.remove(); }
-        /* Settings */
-        function saveSettings() { const name = document.getElementById('settDisplayName').value.trim(); if (name && loggedUser) { loggedUser.name = name; document.getElementById('osUser').textContent = `${name} (${loggedUser.role})`; localStorage.setItem('os_session', JSON.stringify(loggedUser)); } alert('Salvo! ✅'); }
-        function changePassword() { const msg = document.getElementById('passChangeMsg'); const cp = document.getElementById('settCurrentPass').value; const np = document.getElementById('settNewPass').value; const cf = document.getElementById('settConfirmPass').value; msg.style.display = 'block'; if (!cp || !np || !cf) { msg.style.color = '#EF4444'; msg.textContent = '❌ Preencha todos os campos!'; return; } const me = getUsers().find(u => u.user === loggedUser.user); if (!me || me.pass !== cp) { msg.style.color = '#EF4444'; msg.textContent = '❌ Senha atual incorreta!'; return; } if (np.length < 4) { msg.style.color = '#EF4444'; msg.textContent = '❌ Mínimo 4 caracteres!'; return; } if (np !== cf) { msg.style.color = '#EF4444'; msg.textContent = '❌ Senhas não coincidem!'; return; } if (np === cp) { msg.style.color = '#EF4444'; msg.textContent = '❌ Deve ser diferente!'; return; } const c = getCustomPasswords(); c[loggedUser.user] = np; saveCustomPasswords(c); loggedUser.pass = np; localStorage.setItem('os_session', JSON.stringify(loggedUser)); syncToGitHub(); msg.style.color = '#34D399'; msg.textContent = '✅ Senha alterada!';['settCurrentPass', 'settNewPass', 'settConfirmPass'].forEach(i => document.getElementById(i).value = ''); }
-        function saveGitHubConfig() { const t = document.getElementById('settGHToken').value.trim(); const g = document.getElementById('settGHGist').value.trim(); GITHUB_CONFIG.token = t; GITHUB_CONFIG.gistId = g; localStorage.setItem('github_token', t); localStorage.setItem('github_gist_id', g); startAutoSync(); const m = document.getElementById('ghSyncMsg'); if (m) { m.style.color = '#34D399'; m.textContent = '✅ Salvo!'; } }
-        async function testGitHubSync() { const t = document.getElementById('settGHToken').value.trim(); if (!t) return; GITHUB_CONFIG.token = t; localStorage.setItem('github_token', t); try { const r = await fetch('https://api.github.com/user', { headers: getGitHubHeaders() }); const m = document.getElementById('ghSyncMsg'); if (r.ok) { const u = await r.json(); m.style.color = '#34D399'; m.textContent = '✅ ' + u.login; } else { m.style.color = '#EF4444'; m.textContent = '❌ Inválido'; } } catch (e) { } }
-        async function createNewGistFromUI() { const t = document.getElementById('settGHToken').value.trim(); if (!t) return; GITHUB_CONFIG.token = t; localStorage.setItem('github_token', t); const id = await createNewGist(); if (id) { document.getElementById('settGHGist').value = id; GITHUB_CONFIG.gistId = id; localStorage.setItem('github_gist_id', id); startAutoSync(); const m = document.getElementById('ghSyncMsg'); if (m) { m.style.color = '#34D399'; m.textContent = '✅ Gist: ' + id; } } }
-        async function forceUpload() { if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.gistId) return; lastSyncData = ''; await syncToGitHub(); }
-        async function forceDownload() { if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.gistId) return; const ok = await syncFromGitHub(); if (ok) refreshOpenApps(); }
-
-        /* Accounts */
-        function createNewAccount() {
-            const u = document.getElementById('newAccountUser').value.trim();
-            const n = document.getElementById('newAccountName').value.trim();
-            const p = document.getElementById('newAccountPass').value;
-            const r = document.getElementById('newAccountRole').value;
-            const msg = document.getElementById('accountMsg');
-            msg.style.display = 'block';
-            if (!u || !n || !p) { msg.style.color = '#EF4444'; msg.textContent = '❌ Preencha todos os campos!'; return; }
-            const users = getUsers();
-            if (users.find(x => x.user.toLowerCase() === u.toLowerCase())) { msg.style.color = '#EF4444'; msg.textContent = '❌ Usuário já existe!'; return; }
-            const customU = getCustomUsers();
-            customU.push({ user: u, name: n, pass: p, role: r });
-            saveCustomUsers(customU);
-            msg.style.color = '#34D399'; msg.textContent = '✅ Conta criada com sucesso!';
-            ['newAccountUser', 'newAccountName', 'newAccountPass'].forEach(id => document.getElementById(id).value = '');
-            renderAccountsList();
-        }
-        function renderAccountsList() {
-            const list = document.getElementById('accountsList');
-            if (!list) return;
-            const users = getUsers();
-            list.innerHTML = `<h4 style="margin-bottom:12px">👥 Contas Existentes</h4>` + users.map(u => `<div class="app-list-item"><div class="item-content"><h4>${u.name}</h4><p>👤 Usuário: ${u.user} | 🏷️ Cargo: ${u.role}</p></div>${u.role !== 'CEO' ? `<button class="app-btn small danger" onclick="deleteAccount('${u.user}')">🗑️</button>` : ''}</div>`).join('');
         }
         function deleteAccount(user) {
             if (!confirm(`Deletar a conta ${user}?`)) return;

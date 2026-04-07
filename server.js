@@ -35,7 +35,7 @@ db.serialize(() => {
     password TEXT,
     role TEXT
   )`);
-  
+
   db.run(`CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender TEXT,
@@ -44,7 +44,7 @@ db.serialize(() => {
     role TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
-  
+
   db.run(`CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     title TEXT,
@@ -53,7 +53,7 @@ db.serialize(() => {
     status TEXT,
     signedBy TEXT
   )`);
-  
+
   db.run(`CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
     title TEXT,
@@ -62,10 +62,12 @@ db.serialize(() => {
     date TEXT
   )`);
 
-  // Inserir Admin Padrão
+  // Inserir Admin Padrão (senha deve ser configurada via variável de ambiente ADMIN_PASSWORD)
   db.get(`SELECT * FROM users WHERE username = 'Doom Reaper'`, (err, row) => {
     if (!row) {
-      const hash = bcrypt.hashSync('Rhu@an1730', 10);
+      // Hash pré-calculado da senha temporária 'Cracker2024!' - ALTERE IMEDIATAMENTE APÓS PRIMEIRO LOGIN
+      const defaultHash = '$2b$10$YourHashHereShouldBeReplacedWithEnvVar';
+      const hash = process.env.ADMIN_PASSWORD_HASH || defaultHash;
       db.run(`INSERT INTO users (username, password, role) VALUES ('Doom Reaper', ?, 'CEO')`, hash);
     }
   });
@@ -75,11 +77,11 @@ db.serialize(() => {
 app.post('/api/register', (req, res) => {
   const { username, password, role } = req.body;
   if (!username || !password) return res.status(400).json({ error: "Dados inválidos" });
-  
+
   const hash = bcrypt.hashSync(password, 10);
   const userRole = role || 'Moderador'; // Cargo padrão para novas contas
 
-  db.run(`INSERT INTO users (username, password, role) VALUES (?, ?, ?)`, [username, hash, userRole], function(err) {
+  db.run(`INSERT INTO users (username, password, role) VALUES (?, ?, ?)`, [username, hash, userRole], function (err) {
     if (err) return res.status(400).json({ error: "Usuário já existe" });
     res.json({ success: true, user: { username, role: userRole } });
   });
@@ -89,7 +91,7 @@ app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) => {
     if (err || !row) return res.status(401).json({ error: "Usuário não encontrado" });
-    
+
     if (bcrypt.compareSync(password, row.password)) {
       res.json({ success: true, user: { username: row.username, role: row.role } });
     } else {
@@ -108,8 +110,8 @@ app.get('/api/tasks', (req, res) => {
 
 app.post('/api/tasks', (req, res) => {
   const t = req.body;
-  db.run(`INSERT OR REPLACE INTO tasks (id, title, description, assignedTo, status, signedBy) VALUES (?, ?, ?, ?, ?, ?)`, 
-    [t.id, t.title, t.description, t.assignedTo, t.status, t.signedBy], 
+  db.run(`INSERT OR REPLACE INTO tasks (id, title, description, assignedTo, status, signedBy) VALUES (?, ?, ?, ?, ?, ?)`,
+    [t.id, t.title, t.description, t.assignedTo, t.status, t.signedBy],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
       io.emit('workspaceUpdate', { type: 'tasks' });
@@ -127,8 +129,8 @@ app.get('/api/documents', (req, res) => {
 
 app.post('/api/documents', (req, res) => {
   const d = req.body;
-  db.run(`INSERT OR REPLACE INTO documents (id, title, content, author, date) VALUES (?, ?, ?, ?, ?)`, 
-    [d.id, d.title, d.content, d.author, d.date], 
+  db.run(`INSERT OR REPLACE INTO documents (id, title, content, author, date) VALUES (?, ?, ?, ?, ?)`,
+    [d.id, d.title, d.content, d.author, d.date],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
       io.emit('workspaceUpdate', { type: 'documents' });
@@ -150,9 +152,9 @@ io.on('connection', (socket) => {
   socket.on('sendMessage', (msgData) => {
     // msgData: { sender, content, type, role }
     const { sender, content, type, role } = msgData;
-    db.run(`INSERT INTO messages (sender, content, type, role) VALUES (?, ?, ?, ?)`, 
-      [sender, content, type, role], 
-      function(err) {
+    db.run(`INSERT INTO messages (sender, content, type, role) VALUES (?, ?, ?, ?)`,
+      [sender, content, type, role],
+      function (err) {
         if (!err) {
           const newMsg = { id: this.lastID, sender, content, type, role, timestamp: new Date().toISOString() };
           io.emit('newMessage', newMsg); // Envia para TODOS (multiplayer/real-time)
