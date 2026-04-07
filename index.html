@@ -2530,24 +2530,6 @@
         let easterBuf = ''; document.addEventListener('keydown', e => { easterBuf += e.key.toLowerCase(); if (easterBuf.length > 7) easterBuf = easterBuf.slice(-7); if (easterBuf.includes('cracker')) { easterBuf = ''; showConfetti(); } });
         function showConfetti() { const msg = document.getElementById('easter-msg'); msg.style.display = 'block'; for (let i = 0; i < 40; i++) { const c = document.createElement('div'); c.className = 'confetti'; c.style.cssText = `left:${Math.random() * 100}vw;background:${Math.random() > .5 ? '#3B82F6' : '#FFFFFF'};width:${Math.random() * 8 + 4}px;height:${Math.random() * 8 + 4}px;animation-delay:${Math.random() * 2}s;`; document.body.appendChild(c); setTimeout(() => c.remove(), 3000); } setTimeout(() => msg.style.display = 'none', 3000); }
         let loggedUser = null;
-
-  async hashPassword(password) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(password);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        },
-
-  async saveEncryptedSession(userData, password) {
-            const encrypted = await this.encrypt(userData, password);
-            if (encrypted) {
-                localStorage.setItem('os_session_encrypted', JSON.stringify(encrypted));
-                localStorage.setItem('os_session_user', userData.user);
-            }
-        },
-};
-
         const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'http://localhost:3000'; // Mude para a URL do seu servidor em produção
         let socket = null;
         function showLogin(e) { e && e.preventDefault(); const s = localStorage.getItem('os_session'); if (s) { loggedUser = JSON.parse(s); enterOS(); return; } document.getElementById('loginModal').classList.add('show'); }
